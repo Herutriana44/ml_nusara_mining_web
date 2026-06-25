@@ -192,7 +192,7 @@ def create_scenario_chart(scenarios):
         go.Bar(
             x=numeric_labels,
             y=numeric_data,
-            marker_color=['#3498db', '#2ecc71', '#f39c12', '#e74c3c', '#9b59b6'][i % 5 for i in range(len(numeric_labels))],
+            marker_color=['#3498db', '#2ecc71', '#f39c12', '#e74c3c', '#9b59b6'][i % 5] for i in range(len(numeric_labels))],
             text=[f"{v:,.2f}" for v in numeric_data],
             textposition="auto"
         )
