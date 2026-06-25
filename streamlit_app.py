@@ -229,7 +229,7 @@ def display_equipment_predictions(data):
     with col4:
         st.metric("Low Risk", f"{summary.get('low_risk_count', 0):,}", delta="Safe", delta_color="normal")
 
-    st.plotly_chart(create_risk_chart(predictions), use_container_width=True)
+    st.plotly_chart(create_risk_chart(predictions))
 
     # Top Risk Equipment Table
     st.subheader("🔴 Top 5 Highest Risk Equipment")
@@ -277,7 +277,7 @@ def display_maintenance_predictions(data):
     with col4:
         st.metric("Monitor", f"{monitor_count:,}", delta="Observe", delta_color="normal")
 
-    st.plotly_chart(create_priority_chart(predictions), use_container_width=True)
+    st.plotly_chart(create_priority_chart(predictions))
 
     # Maintenance Order
     st.subheader("📅 Top 10 Maintenance Priority")
@@ -321,7 +321,7 @@ def display_cost_anomalies(data):
     with col4:
         st.metric("Avg Variance %", f"{summary.get('avg_variance_pct', 0):.2f}%")
 
-    st.plotly_chart(create_anomaly_chart(anomalies, summary), use_container_width=True)
+    st.plotly_chart(create_anomaly_chart(anomalies, summary))
 
     # Anomaly Details
     st.subheader("🚨 Detected Anomalies")
@@ -349,13 +349,13 @@ def display_whatif_simulation(data):
     scenarios = data.get("scenarios", {})
     correlations = data.get("correlations", [])
 
-    st.plotly_chart(create_scenario_chart(scenarios), use_container_width=True)
+    st.plotly_chart(create_scenario_chart(scenarios))
 
     # Scenario Details
     st.subheader("📊 Scenario Results")
     if scenarios:
         scenario_df = pd.DataFrame([{"Metric": k, "Value": v} for k, v in scenarios.items()])
-        st.dataframe(scenario_df, use_container_width=True, hide_index=True)
+        st.dataframe(scenario_df, hide_index=True)
 
     # Correlations
     if correlations:
@@ -528,7 +528,7 @@ def main():
 
     # Sidebar
     with st.sidebar:
-        st.image("https://via.placeholder.com/300x100/FF5733/FFFFFF?text=NUSARA+Mining", use_container_width=True)
+        st.image("https://via.placeholder.com/300x100/FF5733/FFFFFF?text=NUSARA+Mining")
 
         st.header("⚙️ Configuration")
 
@@ -609,7 +609,7 @@ def main():
         ]
 
         endpoint_df = pd.DataFrame(endpoints)
-        st.dataframe(endpoint_df, use_container_width=True, hide_index=True)
+        st.dataframe(endpoint_df, hide_index=True)
 
         st.divider()
 
