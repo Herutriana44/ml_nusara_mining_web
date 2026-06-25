@@ -154,10 +154,12 @@ def create_anomaly_chart(anomalies, summary):
     fig.add_trace(go.Bar(
         x=df.get('project_name', ['N/A'] * len(df)),
         y=df.get('variance_pct', [0] * len(df)),
-        marker_color=df.get('variance_pct', [0] * len(df)),
-        marker_colorscale='RdYlGn',
-        showscale=True,
-        colorbar=dict(title="Variance %")
+        marker=dict(
+            color=df.get('variance_pct', [0] * len(df)),
+            colorscale='RdYlGn',
+            showscale=True,
+            colorbar=dict(title="Variance %")
+        )
     ))
 
     fig.update_layout(
