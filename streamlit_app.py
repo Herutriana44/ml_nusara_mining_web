@@ -752,7 +752,8 @@ def main():
 
                 # Raw JSON output
                 with st.expander("🔍 Raw JSON Output"):
-                    st.json(data)
+                    json_str = json.dumps(data, indent=2, default=str)
+                    st.code(json_str, language='json')
             else:
                 st.error("Failed to run full pipeline")
 
