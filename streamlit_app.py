@@ -80,6 +80,19 @@ def format_number(num, prefix=""):
         return "N/A"
     return f"{prefix}{num:,.2f}"
 
+def make_arrow_compatible(df):
+    """Convert DataFrame to be Arrow-compatible by fixing mixed-type columns"""
+    if df is None or df.empty:
+        return df
+
+    df_copy = df.copy()
+    for col in df_copy.columns:
+        if df_copy[col].dtype == 'object':
+            # Convert object columns to string to avoid mixed-type issues
+            df_copy[col] = df_copy[col].astype(str)
+
+    return df_copy
+
 def create_risk_chart(predictions):
     """Create risk level distribution chart"""
     if not predictions:
@@ -351,7 +364,15 @@ def display_whatif_simulation(data):
     # Scenario Details
     st.subheader("📊 Scenario Results")
     if scenarios:
-        scenario_df = pd.DataFrame([{"Metric": k, "Value": v} for k, v in scenarios.items()])
+        formatted_scenarios = []
+        for k, v in scenarios.items():
+            if isinstance(v, (int, float)):
+                formatted_value = f"{v:,.2f}" if isinstance(v, float) else f"{v:,}"
+            else:
+                formatted_value = str(v)
+            formatted_scenarios.append({"Metric": k, "Value": formatted_value})
+
+        scenario_df = pd.DataFrame(formatted_scenarios)
         st.dataframe(scenario_df, hide_index=True)
 
     # Correlations
