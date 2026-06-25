@@ -155,7 +155,7 @@ def create_anomaly_chart(anomalies, summary):
         x=df.get('project_name', ['N/A'] * len(df)),
         y=df.get('variance_pct', [0] * len(df)),
         marker_color=df.get('variance_pct', [0] * len(df)),
-        colorscale='RdYlGn',
+        marker_colorscale='RdYlGn',
         showscale=True,
         colorbar=dict(title="Variance %")
     ))
@@ -237,7 +237,6 @@ def display_equipment_predictions(data):
         top_df = pd.DataFrame(top_risk)
         st.dataframe(
             top_df[['equipment_name', 'site_name', 'failure_probability', 'risk_level']],
-            use_container_width=True,
             hide_index=True
         )
     else:
@@ -249,8 +248,7 @@ def display_equipment_predictions(data):
             pred_df = pd.DataFrame(predictions)
             st.dataframe(
                 pred_df[['equipment_name', 'site_name', 'date', 'failure_probability', 'risk_level']],
-                use_container_width=True,
-                hide_index=True
+                    hide_index=True
             )
 
 def display_maintenance_predictions(data):
@@ -285,7 +283,6 @@ def display_maintenance_predictions(data):
         order_df = pd.DataFrame(maintenance_order)
         st.dataframe(
             order_df[['equipment_name', 'site_name', 'maintenance_priority', 'action']],
-            use_container_width=True,
             hide_index=True
         )
     else:
@@ -297,8 +294,7 @@ def display_maintenance_predictions(data):
             pred_df = pd.DataFrame(predictions)
             st.dataframe(
                 pred_df[['equipment_name', 'site_name', 'maintenance_priority', 'action']],
-                use_container_width=True,
-                hide_index=True
+                    hide_index=True
             )
 
 def display_cost_anomalies(data):
@@ -329,7 +325,6 @@ def display_cost_anomalies(data):
         anomaly_df = pd.DataFrame(anomalies)
         st.dataframe(
             anomaly_df[['site_name', 'project_name', 'date', 'budgeted_cost', 'actual_cost', 'variance_pct']],
-            use_container_width=True,
             hide_index=True,
             column_config={
                 "budgeted_cost": st.column_config.NumberColumn(format="Rp %d"),
@@ -363,7 +358,6 @@ def display_whatif_simulation(data):
         corr_df = pd.DataFrame(correlations)
         st.dataframe(
             corr_df[['var1', 'var2', 'correlation']],
-            use_container_width=True,
             hide_index=True
         )
 
