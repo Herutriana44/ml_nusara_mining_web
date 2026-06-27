@@ -223,6 +223,93 @@ def create_scenario_chart(scenarios):
 
     return fig
 
+def create_fleet_cluster_chart(clusters, summary):
+    """Create fleet cluster visualization"""
+    if not clusters:
+        return None
+
+    df = pd.DataFrame(clusters)
+
+    fig = px.scatter_3d(
+        df,
+        x='operating_hours',
+        y='downtime_hours',
+        z='utilization_rate',
+        color='cluster',
+        symbol='equipment_type',
+        hover_name='equipment_name',
+        hover_data=['site_name'],
+        title=f"Fleet Clusters (Total: {summary.get('total_equipment', 0)})"
+    )
+
+    fig.update_layout(height=500)
+    return fig
+
+def create_fleet_priority_chart(priority_results, summary):
+    """Create fleet maintenance priority chart"""
+    if not priority_results:
+        return None
+
+    df = pd.DataFrame(priority_results)
+    priority_counts = df['maintenance_priority'].value_counts().to_dict()
+
+    colors = {"HIGH": "#FF4444", "MEDIUM": "#FFAA44", "LOW": "#44FF44"}
+
+    fig = go.Figure(data=[
+        go.Pie(
+            labels=list(priority_counts.keys()),
+            values=list(priority_counts.values()),
+            marker_colors=[colors.get(k, "#888888") for k in priority_counts.keys()],
+            hole=0.3
+        )
+    ])
+
+    fig.update_layout(
+        title=f"Fleet Maintenance Priority Distribution (Clusters: {summary.get('total_clusters', 0)})",
+        height=400
+    )
+
+    return fig
+
+def create_cluster_summary_chart(cluster_summary):
+    """Create cluster characteristics summary chart"""
+    if not cluster_summary:
+        return None
+
+    df = pd.DataFrame(cluster_summary)
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=df['cluster'],
+        y=df['equipment_count'],
+        name='Equipment Count'
+    ))
+    fig.add_trace(go.Bar(
+        x=df['cluster'],
+        y=df['operating_hours'],
+        name='Avg Operating Hours'
+    ))
+    fig.add_trace(go.Bar(
+        x=df['cluster'],
+        y=df['downtime_hours'],
+        name='Avg Downtime Hours'
+    ))
+    fig.add_trace(go.Bar(
+        x=df['cluster'],
+        y=df['utilization_rate'],
+        name='Avg Utilization Rate'
+    ))
+
+    fig.update_layout(
+        title="Cluster Characteristics Summary",
+        xaxis_title="Cluster",
+        yaxis_title="Value",
+        height=400,
+        barmode='group'
+    )
+
+    return fig
+
 def display_equipment_predictions(data):
     """Display equipment failure predictions"""
     if not data or data.get("status") != "ok":
@@ -384,6 +471,62 @@ def display_whatif_simulation(data):
             hide_index=True
         )
 
+def display_fleet_optimization(data):
+    """Display fleet optimization results"""
+    if not data or data.get("status") != "ok":
+        st.warning("No fleet optimization results available")
+        return
+
+    clusters = data.get("clusters", [])
+    priority_results = data.get("maintenance_priority", [])
+    cluster_summary = data.get("cluster_summary", [])
+    summary = data.get("summary", {})
+
+    # Summary Metrics
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total Equipment", f"{summary.get('total_equipment', 0):,}")
+    with col2:
+        st.metric("Total Clusters", f"{summary.get('total_clusters', 0):,}")
+    with col3:
+        st.metric("High Priority", f"{summary.get('high_priority_count', 0):,}", delta="Critical", delta_color="inverse")
+    with col4:
+        st.metric("Medium Priority", f"{summary.get('medium_priority_count', 0):,}", delta="Warning", delta_color="normal")
+
+    # Cluster Visualization
+    st.plotly_chart(create_fleet_cluster_chart(clusters, summary))
+
+    # Priority Distribution
+    col1, col2 = st.columns(2)
+    with col1:
+        st.plotly_chart(create_fleet_priority_chart(priority_results, summary))
+    with col2:
+        st.plotly_chart(create_cluster_summary_chart(cluster_summary))
+
+    # Cluster Details
+    st.subheader("🔧 Fleet Cluster Details")
+    if clusters:
+        cluster_df = pd.DataFrame(clusters)
+        st.dataframe(
+            cluster_df[['equipment_name', 'site_name', 'equipment_type', 'cluster', 'operating_hours', 'downtime_hours', 'utilization_rate', 'fuel_efficiency', 'cost_per_hour']],
+            hide_index=True
+        )
+
+    # Maintenance Priority Details
+    st.subheader("📅 Fleet Maintenance Priority")
+    if priority_results:
+        priority_df = pd.DataFrame(priority_results)
+        st.dataframe(
+            priority_df[['equipment_name', 'site_name', 'cluster', 'maintenance_priority', 'operating_hours', 'downtime_hours', 'utilization_rate']],
+            hide_index=True
+        )
+
+    # Cluster Summary
+    st.subheader("📊 Cluster Summary")
+    if cluster_summary:
+        summary_df = pd.DataFrame(cluster_summary)
+        st.dataframe(summary_df, hide_index=True)
+
 def display_executive_summary(summary):
     """Display executive summary"""
     if not summary:
@@ -433,6 +576,23 @@ def display_executive_summary(summary):
             f"{optimized:,.2f}",
             delta=f"+{((optimized - baseline) / max(baseline, 1) * 100):.1f}%" if baseline > 0 else None,
             help="Estimated production with optimizations"
+        )
+
+    # Fleet Optimization Metrics
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric(
+            "Fleet Clusters",
+            f"{summary.get('fleet_clusters', 0):,}",
+            help="Number of operational clusters identified"
+        )
+    with col2:
+        st.metric(
+            "Fleet High Priority",
+            f"{summary.get('fleet_high_priority_count', 0):,}",
+            delta="Critical",
+            delta_color="inverse",
+            help="Number of cluster segments requiring high priority maintenance"
         )
 
     # Recommendations
@@ -590,7 +750,7 @@ def main():
         st.subheader("🧭 Navigation")
         page = st.radio(
             "Select Page",
-            ["Overview", "Equipment Failure", "Maintenance Priority", "Cost Anomaly", "What-If Simulation", "Full Pipeline", "Custom Input"]
+            ["Overview", "Equipment Failure", "Maintenance Priority", "Cost Anomaly", "What-If Simulation", "Fleet Optimization", "Full Pipeline", "Custom Input"]
         )
 
     # Main Content based on selected page
@@ -622,6 +782,7 @@ def main():
             {"name": "Maintenance Priority", "path": "/predict/maintenance-priority", "description": "Predict maintenance priority per equipment"},
             {"name": "Cost Anomaly Detection", "path": "/predict/cost-anomaly", "description": "Detect cost anomalies using IsolationForest"},
             {"name": "What-If Simulation", "path": "/predict/whatif-simulation", "description": "Run production what-if scenarios"},
+            {"name": "Fleet Optimization", "path": "/predict/fleet-optimization", "description": "Optimize fleet operations using KMeans clustering"},
             {"name": "Full Pipeline", "path": "/predict/all", "description": "Run all models and get consolidated report"}
         ]
 
@@ -777,6 +938,30 @@ def main():
                     st.code(json_str, language='json')
             else:
                 st.error("Failed to run full pipeline")
+
+    elif page == "Fleet Optimization":
+        st.header("🚚 Fleet Optimization")
+
+        st.markdown("""
+        Optimize fleet operations using KMeans clustering. The model analyzes operating patterns,
+        downtime, fuel efficiency, and cost metrics to group similar equipment and identify
+        maintenance priorities across the fleet.
+        """)
+
+        if st.button("🚀 Run Fleet Optimization"):
+            with st.spinner("Running fleet optimization..."):
+                data = call_api("/predict/fleet-optimization", data=None, method="POST")
+
+            if data:
+                display_fleet_optimization(data)
+            else:
+                st.error("Failed to get fleet optimization results")
+
+        st.divider()
+        st.markdown("""
+        **Note:** Fleet optimization requires equipment data with operating hours, downtime,
+        fuel consumption, and cost metrics for best results.
+        """)
 
     elif page == "Custom Input":
         custom_input_form()
