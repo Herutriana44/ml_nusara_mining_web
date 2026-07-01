@@ -1,117 +1,110 @@
-"""Streamlit dashboard for Acute Ischemic Stroke Segmentation API."""
+"""Streamlit dashboard for NUSARA Mining Inference API."""
 
 from __future__ import annotations
 
-import io
-import time
+import json
 
+import pandas as pd
+import plotly.graph_objects as go
 import requests
 import streamlit as st
-from PIL import Image
+from requests.exceptions import RequestException
 
-API_BASE_URL = "https://herutriana44-acute-ischemic-stroke-segmentation.hf.space"
+API_BASE_URL = "https://herutriana44-ai-nusara-mining-api.hf.space"
 
 st.set_page_config(
-    page_title="Stroke Segmentation",
-    page_icon="🧠",
+    page_title="NUSARA Mining Dashboard",
+    page_icon="⛏️",
     layout="wide",
 )
 
 st.markdown("""
 <style>
-.main-header { font-size:2.2rem; font-weight:bold; color:#E84545; text-align:center; margin-bottom:0.5rem; }
-.sub-header  { font-size:1.1rem; color:#555; text-align:center; margin-bottom:1.5rem; }
+.main-header {
+    font-size: 2.2rem;
+    font-weight: bold;
+    color: #1f77b4;
+    text-align: center;
+    margin-bottom: 0.5rem;
+}
+.sub-header {
+    font-size: 1.1rem;
+    color: #555;
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+.metric-card {
+    background-color: #f0f2f6;
+    padding: 1.5rem;
+    border-radius: 0.5rem;
+    margin: 0.5rem 0;
+}
 </style>
 """, unsafe_allow_html=True)
-
-JOB_TYPES = {
-    "2D Image (PNG/JPG/BMP/TIFF)": "image",
-    "Single DICOM (.dcm)": "dicom",
-    "DICOM Series (ZIP/RAR/TAR)": "series",
-}
-
-ACCEPTED_EXT = {
-    "image":  ["png", "jpg", "jpeg", "bmp", "tif", "tiff", "webp"],
-    "dicom":  ["dcm"],
-    "series": ["zip", "rar", "tar", "gz", "tgz", "bz2", "7z"],
-}
-
-POLL_INTERVAL = 2
 
 
 # ── API helpers ────────────────────────────────────────────────────────────
 
+@st.cache_data(ttl=300)
 def _get(path: str, timeout: int = 10) -> dict | None:
+    """GET request to NUSARA API."""
     try:
         r = requests.get(f"{API_BASE_URL}{path}", timeout=timeout)
         return r.json() if r.ok else None
-    except Exception:
+    except RequestException:
         return None
 
 
-def _post_file(path: str, file_bytes: bytes, filename: str, timeout: int = 60) -> dict | None:
+def _post(path: str, data: dict | None = None, timeout: int = 30) -> dict | None:
+    """POST request to NUSARA API (not cached so results are always fresh)."""
     try:
         r = requests.post(
             f"{API_BASE_URL}{path}",
-            files={"file": (filename, file_bytes)},
+            json=data,
             timeout=timeout,
         )
-        return r.json() if r.ok else {"error": r.status_code, "detail": r.text}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-def _download(job_id: str, filename: str) -> bytes | None:
-    try:
-        r = requests.get(f"{API_BASE_URL}/api/v1/runs/{job_id}/{filename}", timeout=15)
-        return r.content if r.ok else None
-    except Exception:
+        return r.json() if r.ok else None
+    except RequestException:
         return None
-
-
-def submit_job(job_type: str, file_bytes: bytes, filename: str) -> dict | None:
-    ep = {
-        "image":  "/api/v1/jobs/submit-image",
-        "dicom":  "/api/v1/jobs/submit-dicom",
-        "series": "/api/v1/jobs/submit-series",
-    }
-    return _post_file(ep[job_type], file_bytes, filename)
-
-
-def get_job(job_id: str) -> dict | None:
-    return _get(f"/api/v1/jobs/{job_id}")
-
-
-def get_jobs() -> list[dict]:
-    data = _get("/api/v1/jobs")
-    return data.get("jobs", []) if isinstance(data, dict) else []
-
-
-def get_stats() -> dict | None:
-    return _get("/api/v1/stats")
 
 
 def get_health() -> dict | None:
     return _get("/health")
 
 
-def status_icon(status: str) -> str:
-    return {"pending": "🟡", "running": "🔵", "completed": "🟢", "failed": "🔴"}.get(status, "⚪")
+def get_equipment_failure(data: dict | None = None) -> dict | None:
+    return _post("/predict/equipment-failure", data)
+
+
+def get_maintenance_priority(data: dict | None = None) -> dict | None:
+    return _post("/predict/maintenance-priority", data)
+
+
+def get_cost_anomaly(data: dict | None = None) -> dict | None:
+    return _post("/predict/cost-anomaly", data)
+
+
+def get_what_if(data: dict | None = None) -> dict | None:
+    return _post("/predict/what-if", data)
+
+
+def get_full_pipeline(data: dict | None = None) -> dict | None:
+    return _post("/predict/full-pipeline", data)
 
 
 # ── Sidebar ────────────────────────────────────────────────────────────────
 
 with st.sidebar:
-    st.header("⚙️ Config")
+    st.header("⚙️ Configuration")
 
-    if st.button("🔍 Check Health", use_container_width=True):
+    if st.button("🔍 Check API Health", use_container_width=True):
         with st.spinner("Checking..."):
-            h = get_health()
-        if h:
-            st.session_state.health = h
+            health = get_health()
+        if health:
+            st.session_state.health = health
         else:
             st.session_state.pop("health", None)
-            st.error("Tidak bisa terhubung ke API")
+            st.error("Cannot connect to API")
 
     if "health" in st.session_state:
         h = st.session_state.health
@@ -120,241 +113,499 @@ with st.sidebar:
             st.success(f"✅ API: {status.upper()}")
         else:
             st.warning(f"⚠️ API: {status.upper()}")
-        gpu = h.get("gpu_available", h.get("device", "N/A"))
-        st.caption(f"GPU/Device: {gpu}")
+        models = h.get("models_loaded", 0)
+        st.caption(f"Models Loaded: {models}")
 
-    if st.button("📊 Refresh Stats", use_container_width=True):
-        s = get_stats()
-        if s:
-            st.session_state.stats = s
+    st.divider()
+    api_key = st.text_input("API Key (optional)", type="password")
+    if api_key:
+        st.session_state.api_key = api_key
 
-    if "stats" in st.session_state:
-        s = st.session_state.stats
-        st.divider()
-        st.subheader("📊 Queue Stats")
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Pending",   s.get("pending_count",   s.get("pending",   0)))
-        c2.metric("Running",   s.get("running_count",   s.get("running",   0)))
-        c3.metric("Done",      s.get("completed_count", s.get("completed", 0)))
-        c4.metric("Failed",    s.get("failed_count",    s.get("failed",    0)))
+    page = st.selectbox(
+        "📄 Navigate",
+        [
+            "📊 Overview",
+            "🔧 Equipment Failure",
+            "🛠️ Maintenance Priority",
+            "💰 Cost Anomaly",
+            "🎯 What-If Simulation",
+            "📈 Full Pipeline",
+            "✏️ Custom Input",
+        ],
+    )
 
     st.divider()
     st.caption(f"API: `{API_BASE_URL}`")
-    st.caption("Stroke Segmentation Client v2.0")
+    st.caption("NUSARA Mining Dashboard v1.0")
 
 
 # ── Header ─────────────────────────────────────────────────────────────────
 
-st.markdown('<div class="main-header">🧠 Acute Ischemic Stroke Segmentation</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Upload DICOM atau 2D image untuk segmentasi lesi otomatis via UNet</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="main-header">⛏️ NUSARA Mining ML Dashboard</div>',
+    unsafe_allow_html=True,
+)
+st.markdown(
+    '<div class="sub-header">AI-powered predictions for equipment, maintenance, and cost analysis</div>',
+    unsafe_allow_html=True,
+)
 
 
-# ── Tabs ───────────────────────────────────────────────────────────────────
+# ── Page 1: Overview ───────────────────────────────────────────────────────
 
-tab_submit, tab_history, tab_detail = st.tabs(["📤 Submit Job", "📋 Riwayat Job", "🔍 Detail Job"])
+if page == "📊 Overview":
+    st.header("Dashboard Overview")
 
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("📋 Available Endpoints")
+        for name, desc in [
+            ("Equipment Failure", "Predict risk level of equipment breakdown"),
+            ("Maintenance Priority", "Prioritize maintenance tasks across sites"),
+            ("Cost Anomaly", "Detect cost anomalies using Isolation Forest"),
+            ("What-If Simulation", "Simulate production scenarios"),
+            ("Full Pipeline", "Run all models at once with executive summary"),
+        ]:
+            st.write(f"**{name}**: {desc}")
 
-# ── Tab 1: Submit ──────────────────────────────────────────────────────────
+    with col2:
+        st.subheader("📚 Input Data Format")
+        st.write("""
+        **Equipment Data:** date, site_name, equipment_name, operating_hours,
+        downtime_hours, fuel_consumption, maintenance_cost
 
-with tab_submit:
-    col_l, col_r = st.columns([1, 1])
+        **Financial Data:** date, site_name, project_name, budgeted_cost,
+        actual_cost
 
-    with col_l:
-        st.subheader("Kirim Job Inferensi")
+        **Production Data:** date, site_name, material_name, produced_volume,
+        unit_cost
 
-        job_type_label = st.selectbox("Tipe Job", list(JOB_TYPES.keys()))
-        job_type = JOB_TYPES[job_type_label]
-
-        uploaded = st.file_uploader(
-            f"Pilih file ({', '.join(ACCEPTED_EXT[job_type])})",
-            type=ACCEPTED_EXT[job_type],
-            key="uploader",
-        )
-
-        if uploaded:
-            if job_type == "image":
-                try:
-                    st.image(Image.open(uploaded), caption=f"Preview: {uploaded.name}", use_container_width=True)
-                    uploaded.seek(0)
-                except Exception:
-                    st.warning("Tidak bisa preview gambar")
-
-            if st.button("🚀 Submit Job", type="primary", use_container_width=True):
-                file_bytes = uploaded.read()
-                with st.spinner("Mengirim..."):
-                    res = submit_job(job_type, file_bytes, uploaded.name)
-                if not res:
-                    st.error("Gagal submit. Periksa koneksi API.")
-                elif "error" in res:
-                    st.error(f"Gagal: {res}")
-                else:
-                    jid = res.get("job_id")
-                    st.session_state.last_job_id = jid
-                    st.success(f"Job terkirim! ID: `{jid}`")
-                    st.info("Buka tab **Detail Job** untuk pantau progres.")
-
-    with col_r:
-        st.subheader("Job Terbaru")
-        if st.button("🔄 List Semua Job", use_container_width=True):
-            with st.spinner("Mengambil..."):
-                st.session_state.job_list = get_jobs()
-
-        if "job_list" in st.session_state:
-            jobs = st.session_state.job_list
-            if not jobs:
-                st.info("Belum ada job.")
-            else:
-                for j in jobs[:20]:
-                    st.write(
-                        f"{status_icon(j['status'])} `{j['job_id']}` — "
-                        f"{j.get('job_type','?')} — **{j['status']}** "
-                        f"({str(j.get('created_at',''))[:19]})"
-                    )
-                    if j.get("error_message"):
-                        st.caption(f"  Error: {j['error_message']}")
+        **Tips:** Use *Custom Input* page to test with your own data.
+        """)
 
 
-# ── Tab 2: History ─────────────────────────────────────────────────────────
+# ── Page 2: Equipment Failure ──────────────────────────────────────────────
 
-with tab_history:
-    st.subheader("Semua Job")
+elif page == "🔧 Equipment Failure":
+    st.header("🔧 Equipment Failure Prediction")
 
-    if st.button("🔄 Refresh", key="history_refresh"):
-        st.session_state.job_list = get_jobs()
+    if st.button("▶️ Run Equipment Failure Prediction", type="primary", use_container_width=True):
+        with st.spinner("Predicting equipment failures..."):
+            result = get_equipment_failure()
 
-    if "job_list" not in st.session_state:
-        st.session_state.job_list = get_jobs()
-
-    jobs = st.session_state.job_list
-    if not jobs:
-        st.info("Belum ada job.")
-    else:
-        for j in jobs:
-            with st.expander(
-                f"{status_icon(j['status'])}  {j['job_id']}  —  "
-                f"{j.get('job_type','?')}  —  {j['status']}"
-            ):
-                st.json(j)
-                if st.button("🔍 Lihat Detail", key=f"view_{j['job_id']}"):
-                    st.session_state.view_job_id = j["job_id"]
-                    st.rerun()
-
-
-# ── Tab 3: Detail ──────────────────────────────────────────────────────────
-
-with tab_detail:
-    st.subheader("Detail & Hasil Job")
-
-    default_id = st.session_state.get("view_job_id", st.session_state.get("last_job_id", ""))
-    job_id_input = st.text_input("Job ID", value=default_id, key="detail_job_id_input")
-
-    if job_id_input and st.button("🔍 Fetch Job", type="primary"):
-        job = get_job(job_id_input)
-        if job:
-            st.session_state.current_job = job
-            st.session_state.current_job_id = job_id_input
-            st.session_state.pop("view_job_id", None)
+        if not result:
+            st.error("❌ Cannot connect to API. Check API health in sidebar.")
+        elif result.get("status") != "ok":
+            st.error(f"API Error: {result.get('message', 'Unknown error')}")
         else:
-            st.error(f"Job `{job_id_input}` tidak ditemukan.")
+            data = result.get("data", {})
+            predictions = data.get("predictions", [])
 
-    if "current_job" in st.session_state and "current_job_id" in st.session_state:
-        cur_id = st.session_state.current_job_id
+            # Summary metrics
+            high_risk   = sum(1 for p in predictions if p.get("risk_level") == "high")
+            medium_risk = sum(1 for p in predictions if p.get("risk_level") == "medium")
+            low_risk    = sum(1 for p in predictions if p.get("risk_level") == "low")
 
-        # Selalu refresh status terkini
-        fresh = get_job(cur_id)
-        if fresh:
-            st.session_state.current_job = fresh
-        job = st.session_state.current_job
+            c1, c2, c3 = st.columns(3)
+            c1.metric("🔴 High Risk",   high_risk)
+            c2.metric("🟠 Medium Risk", medium_risk)
+            c3.metric("🟢 Low Risk",    low_risk)
 
-        st.write(f"**Status:** {status_icon(job['status'])} {job['status']}")
-        st.write(f"**Tipe:** {job.get('job_type', '?')}")
-        st.write(f"**Dibuat:** {str(job.get('created_at',''))[:19]}")
-
-        if job.get("error_message"):
-            st.error(f"Error: {job['error_message']}")
-
-        # Auto-poll jika masih pending/running
-        if job["status"] in ("pending", "running"):
-            ph = st.empty()
-            ph.info(f"⏳ Menunggu... status: **{job['status']}**")
-            while True:
-                time.sleep(POLL_INTERVAL)
-                updated = get_job(cur_id)
-                if updated:
-                    st.session_state.current_job = updated
-                    ph.info(f"⏳ Status: **{updated['status']}**")
-                    if updated["status"] in ("completed", "failed"):
-                        break
-                else:
-                    break
-            st.rerun()
-
-        # Hasil jika selesai
-        if job["status"] == "completed":
-            result = job.get("result") or {}
-            st.success("✅ Inferensi selesai!")
             st.divider()
 
-            run_id = result.get("run_id", cur_id)
+            # Risk distribution bar chart
+            if predictions:
+                fig = go.Figure(data=[go.Bar(
+                    x=["High", "Medium", "Low"],
+                    y=[high_risk, medium_risk, low_risk],
+                    marker_color=["#d62728", "#ff7f0e", "#2ca02c"],
+                )])
+                fig.update_layout(
+                    title="Risk Level Distribution",
+                    xaxis_title="Risk Level",
+                    yaxis_title="Count",
+                )
+                st.plotly_chart(fig, use_container_width=True)
 
-            # Tampilkan gambar hasil
-            file_map = [
-                ("Input Asli",  result.get("original_png",  result.get("input_name",  "input.png"))),
-                ("Mask Prediksi", result.get("mask_png",    "mask_pred.png")),
-                ("Overlay",     result.get("overlay_png",   "overlay.png")),
-            ]
+                # Top 10 by risk score
+                st.subheader("Top 10 Highest Risk Equipment")
+                df = pd.DataFrame(predictions)
+                if "risk_score" in df.columns:
+                    df = df.sort_values("risk_score", ascending=False)
+                st.dataframe(df.head(10), use_container_width=True)
 
-            img_cols = st.columns(3)
-            for idx, (label, fname) in enumerate(file_map):
-                with img_cols[idx]:
-                    st.caption(label)
-                    raw = _download(run_id, fname)
-                    if raw:
-                        try:
-                            st.image(Image.open(io.BytesIO(raw)), use_container_width=True)
-                        except Exception:
-                            st.warning(f"Tidak bisa tampilkan {fname}")
-                    else:
-                        st.info("File tidak tersedia")
-
-            # Metrics
-            st.divider()
-            m1, m2, m3 = st.columns(3)
-            with m1:
-                st.metric("Lesion Pixels", result.get("lesion_pixels", "N/A"))
-            with m2:
-                shape = result.get("shape_hw", [])
-                st.metric("Shape (H×W)", f"{shape[0]}×{shape[1]}" if len(shape) == 2 else "N/A")
-            with m3:
-                st.metric("Job Type", job.get("job_type", "N/A"))
-
-            # Tombol download
-            st.divider()
-            st.subheader("⬇️ Download Hasil")
-            dl_cols = st.columns(3)
-            for idx, (label, fname) in enumerate(file_map):
-                with dl_cols[idx]:
-                    raw = _download(run_id, fname)
-                    if raw:
-                        st.download_button(
-                            label=f"⬇️ {label}",
-                            data=raw,
-                            file_name=fname,
-                            mime="image/png",
-                            use_container_width=True,
-                        )
-
-            # Raw JSON
-            with st.expander("🔍 Raw Result JSON"):
+            with st.expander("🔍 Raw JSON Response"):
                 st.json(result)
+
+
+# ── Page 3: Maintenance Priority ───────────────────────────────────────────
+
+elif page == "🛠️ Maintenance Priority":
+    st.header("🛠️ Maintenance Priority Analysis")
+
+    if st.button("▶️ Run Maintenance Priority", type="primary", use_container_width=True):
+        with st.spinner("Analyzing maintenance priorities..."):
+            result = get_maintenance_priority()
+
+        if not result:
+            st.error("❌ Cannot connect to API. Check API health in sidebar.")
+        elif result.get("status") != "ok":
+            st.error(f"API Error: {result.get('message', 'Unknown error')}")
+        else:
+            data = result.get("data", {})
+            predictions = data.get("predictions", [])
+
+            urgent = sum(1 for p in predictions if p.get("priority") == "urgent")
+            high   = sum(1 for p in predictions if p.get("priority") == "high")
+            medium = sum(1 for p in predictions if p.get("priority") == "medium")
+            low    = sum(1 for p in predictions if p.get("priority") == "low")
+
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("🔴 Urgent", urgent)
+            c2.metric("🟠 High",   high)
+            c3.metric("🟡 Medium", medium)
+            c4.metric("🟢 Low",    low)
+
+            st.divider()
+
+            # Pie chart
+            if predictions:
+                fig = go.Figure(data=[go.Pie(
+                    labels=["Urgent", "High", "Medium", "Low"],
+                    values=[urgent, high, medium, low],
+                    marker_colors=["#d62728", "#ff7f0e", "#ffd700", "#2ca02c"],
+                )])
+                fig.update_layout(title="Maintenance Priority Distribution")
+                st.plotly_chart(fig, use_container_width=True)
+
+                st.subheader("Maintenance Tasks (sorted by priority)")
+                df = pd.DataFrame(predictions)
+                if "priority_score" in df.columns:
+                    df = df.sort_values("priority_score", ascending=False)
+                st.dataframe(df, use_container_width=True)
+
+            with st.expander("🔍 Raw JSON Response"):
+                st.json(result)
+
+
+# ── Page 4: Cost Anomaly ──────────────────────────────────────────────────
+
+elif page == "💰 Cost Anomaly":
+    st.header("💰 Cost Anomaly Detection")
+
+    if st.button("▶️ Run Cost Anomaly Detection", type="primary", use_container_width=True):
+        with st.spinner("Detecting cost anomalies..."):
+            result = get_cost_anomaly()
+
+        if not result:
+            st.error("❌ Cannot connect to API. Check API health in sidebar.")
+        elif result.get("status") != "ok":
+            st.error(f"API Error: {result.get('message', 'Unknown error')}")
+        else:
+            data = result.get("data", {})
+            predictions = data.get("predictions", [])
+
+            total     = len(predictions)
+            anomalies = sum(1 for p in predictions if p.get("is_anomaly"))
+            normal    = total - anomalies
+
+            c1, c2, c3 = st.columns(3)
+            c1.metric("📋 Total Records",      total)
+            c2.metric("⚠️ Anomalies Detected", anomalies)
+            c3.metric("✅ Normal Records",      normal)
+
+            st.divider()
+
+            if predictions:
+                # Status bar chart
+                fig = go.Figure(data=[go.Bar(
+                    x=["Normal", "Anomaly"],
+                    y=[normal, anomalies],
+                    marker_color=["#2ca02c", "#d62728"],
+                )])
+                fig.update_layout(title="Cost Records Status", xaxis_title="Status", yaxis_title="Count")
+                st.plotly_chart(fig, use_container_width=True)
+
+                # Variance distribution
+                variance_vals = [p.get("variance_score", 0) for p in predictions if "variance_score" in p]
+                if variance_vals:
+                    fig2 = go.Figure(data=[go.Histogram(x=variance_vals, nbinsx=30, marker_color="#1f77b4")])
+                    fig2.update_layout(title="Variance Score Distribution", xaxis_title="Variance Score", yaxis_title="Frequency")
+                    st.plotly_chart(fig2, use_container_width=True)
+
+                # Anomaly table
+                st.subheader("Detected Anomalies")
+                anomaly_df = pd.DataFrame([p for p in predictions if p.get("is_anomaly")])
+                if not anomaly_df.empty:
+                    st.dataframe(anomaly_df, use_container_width=True)
+                else:
+                    st.info("✅ No anomalies detected in this dataset.")
+
+            with st.expander("🔍 Raw JSON Response"):
+                st.json(result)
+
+
+# ── Page 5: What-If Simulation ────────────────────────────────────────────
+
+elif page == "🎯 What-If Simulation":
+    st.header("🎯 What-If Production Simulation")
+
+    if st.button("▶️ Run What-If Simulation", type="primary", use_container_width=True):
+        with st.spinner("Running simulation..."):
+            result = get_what_if()
+
+        if not result:
+            st.error("❌ Cannot connect to API. Check API health in sidebar.")
+        elif result.get("status") != "ok":
+            st.error(f"API Error: {result.get('message', 'Unknown error')}")
+        else:
+            data     = result.get("data", {})
+            baseline = data.get("baseline", {})
+            scenario = data.get("scenario", {})
+
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Current Production",   baseline.get("total_production", 0))
+            c2.metric("Simulated Production", scenario.get("total_production", 0))
+            change = scenario.get("total_production", 0) - baseline.get("total_production", 0)
+            c3.metric("Difference", f"{change:+.2f}")
+
+            st.divider()
+
+            # Comparison chart
+            if baseline and scenario:
+                shared_keys = [k for k in baseline if k in scenario]
+                if shared_keys:
+                    fig = go.Figure()
+                    fig.add_trace(go.Bar(name="Current",   x=shared_keys, y=[baseline[k] for k in shared_keys]))
+                    fig.add_trace(go.Bar(name="Simulated", x=shared_keys, y=[scenario[k] for k in shared_keys]))
+                    fig.update_layout(title="Baseline vs Scenario Comparison", barmode="group")
+                    st.plotly_chart(fig, use_container_width=True)
+
+            # Recommendations
+            recs = data.get("recommendations", [])
+            if recs:
+                st.subheader("📋 Recommendations")
+                for i, rec in enumerate(recs, 1):
+                    st.write(f"{i}. {rec}")
+
+            with st.expander("🔍 Raw JSON Response"):
+                st.json(result)
+
+
+# ── Page 6: Full Pipeline ─────────────────────────────────────────────────
+
+elif page == "📈 Full Pipeline":
+    st.header("📈 Full ML Pipeline Analysis")
+    st.info("Runs all prediction models at once and provides an executive summary.")
+
+    if st.button("▶️ Run Full Pipeline", type="primary", use_container_width=True):
+        with st.spinner("Running all models — this may take a moment..."):
+            result = get_full_pipeline()
+
+        if not result:
+            st.error("❌ Cannot connect to API. Check API health in sidebar.")
+        elif result.get("status") != "ok":
+            st.error(f"API Error: {result.get('message', 'Unknown error')}")
+        else:
+            data = result.get("data", {})
+
+            # Executive summary
+            summary = data.get("summary")
+            if summary:
+                st.subheader("📊 Executive Summary")
+                if isinstance(summary, str):
+                    st.write(summary)
+                else:
+                    st.json(summary)
+
+            st.divider()
+
+            tab1, tab2, tab3, tab4 = st.tabs([
+                "🔧 Equipment", "🛠️ Maintenance", "💰 Cost", "🎯 What-If"
+            ])
+
+            with tab1:
+                ef = data.get("equipment_failure", {}).get("data", {})
+                preds = ef.get("predictions", [])
+                if preds:
+                    st.dataframe(pd.DataFrame(preds).head(10), use_container_width=True)
+                else:
+                    st.info("No equipment failure data in pipeline result.")
+
+            with tab2:
+                mp = data.get("maintenance_priority", {}).get("data", {})
+                preds = mp.get("predictions", [])
+                if preds:
+                    st.dataframe(pd.DataFrame(preds).head(10), use_container_width=True)
+                else:
+                    st.info("No maintenance priority data in pipeline result.")
+
+            with tab3:
+                ca = data.get("cost_anomaly", {}).get("data", {})
+                preds = ca.get("predictions", [])
+                if preds:
+                    anomaly_df = pd.DataFrame([p for p in preds if p.get("is_anomaly")])
+                    if not anomaly_df.empty:
+                        st.dataframe(anomaly_df.head(10), use_container_width=True)
+                    else:
+                        st.info("No cost anomalies detected.")
+
+            with tab4:
+                wi = data.get("what_if", {}).get("data", {})
+                if wi:
+                    st.json(wi)
+                else:
+                    st.info("No what-if simulation data in pipeline result.")
+
+            st.divider()
+            with st.expander("🔍 Full Raw JSON Response"):
+                st.json(result)
+
+
+# ── Page 7: Custom Input ──────────────────────────────────────────────────
+
+elif page == "✏️ Custom Input":
+    st.header("✏️ Custom Data Input & Testing")
+
+    model_target = st.selectbox(
+        "Prediction Target",
+        ["Equipment Failure", "Maintenance Priority", "Cost Anomaly", "What-If Simulation"],
+    )
+
+    input_method = st.radio("Input Method", ["Form", "JSON"])
+
+    if input_method == "Form":
+        records: list[dict] = []
+
+        if model_target == "Equipment Failure":
+            c1, c2 = st.columns(2)
+            with c1:
+                date          = st.date_input("Date")
+                site_name     = st.text_input("Site Name")
+                eq_name       = st.text_input("Equipment Name")
+                eq_type       = st.text_input("Equipment Type")
+            with c2:
+                op_hours      = st.number_input("Operating Hours",  min_value=0.0)
+                down_hours    = st.number_input("Downtime Hours",    min_value=0.0)
+                fuel          = st.number_input("Fuel Consumption",  min_value=0.0)
+                maint_cost    = st.number_input("Maintenance Cost",  min_value=0.0)
+
+            records = [{
+                "date": str(date), "site_name": site_name,
+                "equipment_name": eq_name, "equipment_type": eq_type,
+                "operating_hours": op_hours, "downtime_hours": down_hours,
+                "fuel_consumption": fuel, "maintenance_cost": maint_cost,
+            }]
+            endpoint_fn = get_equipment_failure
+
+        elif model_target == "Maintenance Priority":
+            c1, c2 = st.columns(2)
+            with c1:
+                date       = st.date_input("Date")
+                site_name  = st.text_input("Site Name")
+                eq_name    = st.text_input("Equipment Name")
+            with c2:
+                op_hours   = st.number_input("Operating Hours",  min_value=0.0)
+                down_hours = st.number_input("Downtime Hours",    min_value=0.0)
+                maint_cost = st.number_input("Maintenance Cost",  min_value=0.0)
+
+            records = [{
+                "date": str(date), "site_name": site_name,
+                "equipment_name": eq_name, "operating_hours": op_hours,
+                "downtime_hours": down_hours, "maintenance_cost": maint_cost,
+            }]
+            endpoint_fn = get_maintenance_priority
+
+        elif model_target == "Cost Anomaly":
+            c1, c2 = st.columns(2)
+            with c1:
+                date          = st.date_input("Date")
+                site_name     = st.text_input("Site Name")
+                project_name  = st.text_input("Project Name")
+            with c2:
+                budgeted      = st.number_input("Budgeted Cost",  min_value=0.0)
+                actual        = st.number_input("Actual Cost",    min_value=0.0)
+
+            records = [{
+                "date": str(date), "site_name": site_name,
+                "project_name": project_name,
+                "budgeted_cost": budgeted, "actual_cost": actual,
+            }]
+            endpoint_fn = get_cost_anomaly
+
+        else:  # What-If
+            c1, c2 = st.columns(2)
+            with c1:
+                date            = st.date_input("Date")
+                site_name       = st.text_input("Site Name")
+                material_name   = st.text_input("Material Name")
+            with c2:
+                produced_volume = st.number_input("Produced Volume",  min_value=0.0)
+                unit_cost       = st.number_input("Unit Cost",        min_value=0.0)
+
+            records = [{
+                "date": str(date), "site_name": site_name,
+                "material_name": material_name,
+                "produced_volume": produced_volume, "unit_cost": unit_cost,
+            }]
+            endpoint_fn = get_what_if
+
+        if st.button("▶️ Run Prediction", type="primary", use_container_width=True):
+            payload = {"records": records}
+            with st.spinner("Predicting..."):
+                result = endpoint_fn(payload)
+            if result:
+                st.success("✅ Prediction complete!")
+                st.json(result)
+            else:
+                st.error("❌ Prediction failed — check API connection.")
+
+    else:  # JSON input
+        st.caption("Enter records as JSON. Example for Equipment Failure:")
+        st.code(json.dumps({
+            "records": [{
+                "date": "2025-05-01",
+                "site_name": "Tambang Nikel E",
+                "equipment_name": "Bulldozer BD-002",
+                "equipment_type": "Bulldozer",
+                "operating_hours": 286.0,
+                "downtime_hours": 23.0,
+                "fuel_consumption": 1667.0,
+                "maintenance_cost": 849403.0,
+            }]
+        }, indent=2), language="json")
+
+        json_input = st.text_area("Enter JSON payload", height=300)
+
+        if st.button("▶️ Run Prediction", type="primary", use_container_width=True):
+            fn_map = {
+                "Equipment Failure":   get_equipment_failure,
+                "Maintenance Priority": get_maintenance_priority,
+                "Cost Anomaly":        get_cost_anomaly,
+                "What-If Simulation":  get_what_if,
+            }
+            try:
+                payload = json.loads(json_input)
+                with st.spinner("Predicting..."):
+                    result = fn_map[model_target](payload)
+                if result:
+                    st.success("✅ Prediction complete!")
+                    st.json(result)
+                else:
+                    st.error("❌ Prediction failed — check API connection.")
+            except json.JSONDecodeError as exc:
+                st.error(f"Invalid JSON: {exc}")
 
 
 # ── Footer ─────────────────────────────────────────────────────────────────
 
 st.divider()
 st.markdown(
-    f"<div style='text-align:center;color:#888;padding:1rem'>"
-    f"Stroke Segmentation Dashboard | API: <code>{API_BASE_URL}</code>"
-    f"</div>",
+    f"""
+    <div style='text-align:center;color:#888;padding:1rem'>
+    ⛏️ NUSARA Mining ML Dashboard &nbsp;|&nbsp; API: <code>{API_BASE_URL}</code><br>
+    <small>© 2025 NUSARA AI. Powered by Streamlit.</small>
+    </div>
+    """,
     unsafe_allow_html=True,
 )
