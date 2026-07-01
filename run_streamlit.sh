@@ -1,44 +1,35 @@
 #!/bin/bash
 
-# NUSARA Mining Streamlit Dashboard Launcher
-# Quick start script for running the Streamlit dashboard
+# Acute Ischemic Stroke Segmentation - Streamlit Dashboard Launcher
 
 echo "=========================================="
-echo "NUSARA Mining Inference Dashboard"
+echo "Acute Ischemic Stroke Segmentation"
 echo "=========================================="
 echo ""
 
-# Check if streamlit is installed
 if ! command -v streamlit &> /dev/null; then
-    echo "❌ Streamlit not found!"
-    echo ""
-    echo "Installing dependencies..."
+    echo "Streamlit not found! Installing..."
     pip install -r requirements_streamlit.txt
     echo ""
 fi
 
-# Check if API is reachable
-echo "🔍 Checking API health..."
-API_URL="https://herutriana44-ai-nusara-mining-api.hf.space"
+echo "Checking API health..."
+API_URL="https://herutriana44-acute-ischemic-stroke-segmentation.hf.space"
 HEALTH_CHECK=$(curl -s -o /dev/null -w "%{http_code}" $API_URL/health 2>/dev/null)
 
 if [ "$HEALTH_CHECK" = "200" ]; then
-    echo "✅ API is reachable and healthy"
+    echo "API healthy: $API_URL"
 else
-    echo "⚠️  Warning: Could not reach API at $API_URL"
-    echo "   The API might be sleeping (HuggingFace Space cold start)"
-    echo "   Dashboard will still start, but predictions may fail initially"
+    echo "Warning: API tidak bisa dijangkau (mungkin cold start HF Space)"
 fi
 
 echo ""
-echo "🚀 Starting Streamlit dashboard..."
-echo "   Dashboard will open at: http://localhost:8501"
-echo ""
-echo "Press Ctrl+C to stop the server"
+echo "Starting Streamlit dashboard..."
+echo "URL: http://localhost:8501"
+echo "Tekan Ctrl+C untuk stop"
 echo "=========================================="
 echo ""
 
-# Start streamlit
 streamlit run streamlit_app.py \
     --server.port 8501 \
     --server.address localhost \
